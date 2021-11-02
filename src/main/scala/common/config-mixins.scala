@@ -197,6 +197,7 @@ class WithNLargeBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends 
               numFpPhysRegisters = 96,
               numLdqEntries = 24,
               numStqEntries = 24,
+              nPerfCounters = 29,
               maxBrCount = 16,
               numFetchBufferEntries = 24,
               ftq = FtqParameters(nEntries=32),
