@@ -104,6 +104,15 @@ class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
   val perf = Input(new Bundle {
     val acquire = Bool()
     val release = Bool()
+    val mshrs_has_busy = Bool()
+    val mshrs_all_busy = Bool()
+    val mshrs_reuse = Bool()
+    val mshrs_load_establish = Bool()
+    val mshrs_load_reuse = Bool()
+    val mshrs_store_establish = Bool()
+    val mshrs_store_reuse = Bool()
+    val iomshrs_has_busy = Bool()
+    val iomshrs_all_busy = Bool()
   })
 
   override def cloneType = new LSUDMemIO().asInstanceOf[this.type]
@@ -155,6 +164,18 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
     val acquire = Bool()
     val release = Bool()
     val tlbMiss = Bool()
+    val ldq_nonempty = Bool()
+    val stq_nonempty = Bool()
+    val stq_full = Bool()
+    val mshrs_has_busy = Bool()
+    val mshrs_all_busy = Bool()
+    val mshrs_reuse = Bool()
+    val mshrs_load_establish = Bool()
+    val mshrs_load_reuse = Bool()
+    val mshrs_store_establish = Bool()
+    val mshrs_store_reuse = Bool()
+    val iomshrs_has_busy = Bool()
+    val iomshrs_all_busy = Bool()
   })
 }
 
@@ -253,6 +274,15 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   io.core.perf.tlbMiss := io.ptw.req.fire()
   io.core.perf.acquire := io.dmem.perf.acquire
   io.core.perf.release := io.dmem.perf.release
+  io.core.perf.mshrs_has_busy := io.dmem.perf.mshrs_has_busy
+  io.core.perf.mshrs_all_busy := io.dmem.perf.mshrs_all_busy
+  io.core.perf.mshrs_reuse := io.dmem.perf.mshrs_reuse
+  io.core.perf.mshrs_load_establish := io.dmem.perf.mshrs_load_establish
+  io.core.perf.mshrs_load_reuse := io.dmem.perf.mshrs_load_reuse
+  io.core.perf.mshrs_store_establish := io.dmem.perf.mshrs_store_establish
+  io.core.perf.mshrs_store_reuse := io.dmem.perf.mshrs_store_reuse
+  io.core.perf.iomshrs_has_busy := io.dmem.perf.iomshrs_has_busy
+  io.core.perf.iomshrs_all_busy := io.dmem.perf.iomshrs_all_busy
 
 
   val clear_store     = WireInit(false.B)
@@ -284,6 +314,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   var st_enq_idx = stq_tail
 
   val stq_nonempty = (0 until numStqEntries).map{ i => stq(i).valid }.reduce(_||_) =/= 0.U
+  val ldq_nonempty = (0 until numStqEntries).map{ i => ldq(i).valid }.reduce(_||_) =/= 0.U
+  io.core.perf.ldq_nonempty := ldq_nonempty
+  io.core.perf.stq_nonempty := stq_nonempty
 
   var ldq_full = Bool()
   var stq_full = Bool()
@@ -347,7 +380,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   io.dmem.force_order   := io.core.fence_dmem
   io.core.fencei_rdy    := !stq_nonempty && io.dmem.ordered
 
-
+  io.core.perf.stq_full := io.core.stq_full.reduce(_||_)
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // Execute stage (access TLB, send requests to Memory)

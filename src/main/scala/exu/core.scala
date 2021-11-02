@@ -38,6 +38,7 @@ import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.{Causes, PRV}
 import freechips.rocketchip.util.{Str, UIntIsOneOf, CoreMonitorBundle}
 import freechips.rocketchip.devices.tilelink.{PLICConsts, CLINTConsts}
+import freechips.rocketchip.rocket.{EventSet, EventSets, SuperscalarEventSets}
 
 import testchipip.{ExtendedTracedInstruction}
 
@@ -159,6 +160,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val dec_xcpts  = Wire(Vec(coreWidth, Bool()))
   val ren_stalls = Wire(Vec(coreWidth, Bool()))
 
+  val dec_hazards= Wire(Vec(coreWidth, Bool()))
+
   // Rename2/Dispatch stage
   val dis_valids = Wire(Vec(coreWidth, Bool()))
   val dis_uops   = Wire(Vec(coreWidth, new MicroOp))
@@ -241,31 +244,303 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // Uarch Hardware Performance Events (HPEs)
 
-  val perfEvents = new freechips.rocketchip.rocket.EventSets(Seq(
-    new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-      ("exception", () => rob.io.com_xcpt.valid),
-      ("nop",       () => false.B),
-      ("nop",       () => false.B),
-      ("nop",       () => false.B))),
+   val retired_store = Wire(Vec(coreWidth, Bool()))
+   val retired_load = Wire(Vec(coreWidth, Bool()))
+   val retired_amo = Wire(Vec(coreWidth, Bool()))
+   val retired_system = Wire(Vec(coreWidth, Bool()))
+   val csr_insn = Wire(Vec(coreWidth, Bool()))
+   val int_insn = Wire(Vec(coreWidth, Bool()))
+   val retired_arith = Wire(Vec(coreWidth, Bool()))
+   val retired_branch = Wire(Vec(coreWidth, Bool()))
+   val retired_jal = Wire(Vec(coreWidth, Bool()))
+   val retired_jalr = Wire(Vec(coreWidth, Bool()))
+   val retired_mul = Wire(Vec(coreWidth, Bool()))
+   val retired_div = Wire(Vec(coreWidth, Bool()))
+ 
+   val retired_fp_store = Wire(Vec(coreWidth, Bool()))
+   val retired_fp_load = Wire(Vec(coreWidth, Bool()))
+   val retired_fp_add = Wire(Vec(coreWidth, Bool()))
+   val retired_fp_mul = Wire(Vec(coreWidth, Bool()))
+   val retired_fp_madd = Wire(Vec(coreWidth, Bool()))
+   val retired_fp_div = Wire(Vec(coreWidth, Bool()))
+   val retired_fp_other = Wire(Vec(coreWidth, Bool()))
 
-    new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-//      ("I$ blocked",                        () => icache_blocked),
-      ("nop",                               () => false.B),
-      // ("branch misprediction",              () => br_unit.brinfo.mispredict),
-      // ("control-flow target misprediction", () => br_unit.brinfo.mispredict &&
-      //                                             br_unit.brinfo.cfi_type === CFI_JALR),
-      ("flush",                             () => rob.io.flush.valid)
-      //("branch resolved",                   () => br_unit.brinfo.valid)
-    )),
 
-    new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-      ("I$ miss",     () => io.ifu.perf.acquire),
-      ("D$ miss",     () => io.lsu.perf.acquire),
-      ("D$ release",  () => io.lsu.perf.release),
-      ("ITLB miss",   () => io.ifu.perf.tlbMiss),
-      ("DTLB miss",   () => io.lsu.perf.tlbMiss),
-      ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
-  val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents, boomParams.customCSRs.decls))
+   for (w <- 0 until coreWidth) {
+     int_insn(w) := !(rob.io.commit.uops(w).fp_val)
+     retired_load(w)   := rob.io.commit.valids(w) && rob.io.commit.uops(w).uses_ldq && int_insn(w)
+     retired_store(w)  := rob.io.commit.valids(w) && rob.io.commit.uops(w).uses_stq && int_insn(w)
+     retired_amo(w)    := rob.io.commit.valids(w) && rob.io.commit.uops(w).is_amo && int_insn(w)
+     csr_insn(w)       := (rob.io.commit.uops(w).ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N)
+     retired_system(w) := rob.io.commit.valids(w) && csr_insn(w)
+     retired_arith(w)  := rob.io.commit.valids(w) && int_insn(w) && !(rob.io.commit.uops(w).is_jal || rob.io.commit.uops(w).is_jalr || rob.io.commit.uops(w).uses_stq || rob.io.commit.uops(w).uses_ldq || rob.io.commit.uops(w).is_amo || csr_insn(w))
+     retired_branch(w) := rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br
+     retired_jal(w)    := rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jal
+     retired_jalr(w)   := rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jalr
+     retired_mul(w)    := rob.io.commit.valids(w) && (rob.io.commit.uops(w).fu_code === FU_MUL) && int_insn(w)
+     retired_div(w)    := rob.io.commit.valids(w) && (rob.io.commit.uops(w).fu_code === FU_DIV) && int_insn(w)
+ 
+     retired_fp_store(w) := rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w) && rob.io.commit.uops(w).uses_stq
+     retired_fp_load(w)  := rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w) && rob.io.commit.uops(w).uses_ldq
+     retired_fp_add(w)   := rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w) && rob.io.commit.uops(w).uopc.isOneOf(uopFADD_S, uopFSUB_S, uopFADD_D, uopFSUB_D)
+     retired_fp_mul(w)   := rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w) && rob.io.commit.uops(w).uopc.isOneOf(uopFMUL_S, uopFMUL_D)
+     retired_fp_madd(w)  := rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w) && rob.io.commit.uops(w).uopc.isOneOf(uopFMADD_S, uopFMSUB_S, uopFNMADD_S, uopFNMSUB_S, uopFMADD_D, uopFMSUB_D, uopFNMADD_D, uopFNMSUB_D)
+     retired_fp_div(w)   := rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w) && (rob.io.commit.uops(w).fu_code === FU_FDV)
+     retired_fp_other(w) := rob.io.commit.uops(w).fp_val && !(retired_fp_store(w) || retired_fp_load(w) || retired_fp_add(w) || retired_fp_mul(w) || retired_fp_div(w))
+   }
+
+   val insnCommitBaseEvents = (0 until coreWidth).map(w => new EventSet((mask, hits) => (mask & hits).orR, Seq(
+      ("int load",    () => retired_load(w)),
+      ("int store",   () => retired_store(w)),
+      ("int amo",     () => retired_amo(w)),
+      ("int system",  () => retired_system(w)),
+      ("int arith",   () => retired_arith(w)),
+      ("int branch",  () => retired_branch(w)),
+      ("int jal",     () => retired_jal(w)),
+      ("int jalr",    () => retired_jalr(w)),
+      ("int mul",     () => retired_mul(w)),
+      ("int div",     () => retired_div(w)))
+      ++ (if (!usingFPU) Seq() else Seq(
+        ("fp insn",     () => rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w)),
+        ("fp load",     () => retired_fp_load(w)),
+        ("fp store",    () => retired_fp_store(w)),
+        ("fp add",      () => retired_fp_add(w)),
+        ("fp mul",      () => retired_fp_mul(w)),
+        ("fp mul-add",  () => retired_fp_madd(w)),
+        ("fp div",      () => retired_fp_div(w)),
+        ("fp other",    () => retired_fp_other(w))))
+    ))
+ 
+   val micrArchEvents = new EventSet((mask, hits) => (mask & hits).orR, Seq(
+      ("exception",                         () => rob.io.com_xcpt.valid),
+      ("front-end f1 is resteered",         () => io.ifu.perf.f1_clear),
+      ("front-end f2 is resteered",         () => io.ifu.perf.f2_clear),
+      ("front-end f3 is resteered",         () => io.ifu.perf.f3_clear),
+      ("front-end f4 is resteered",         () => io.ifu.perf.f4_clear)
+    ))
+ 
+   val resourceEvents = new EventSet((mask, hits) => (mask & hits).orR, Seq(
+      ("frontend fb full",                  () => io.ifu.perf.fb_full),
+      ("frontend ftq full",                 () => io.ifu.perf.ftq_full),
+      ("fp issue slots full",               () => fp_pipeline.io.perf.iss_slots_full),
+      ("fp issue slots empty",              () => fp_pipeline.io.perf.iss_slots_empty),
+      ("int issue slots full",              () => int_iss_unit.io.perf.full),
+      ("int issue slots empty",             () => int_iss_unit.io.perf.empty),
+      ("mem issue slots full",              () => mem_iss_unit.io.perf.full),
+      ("mem issue slots empty",             () => mem_iss_unit.io.perf.empty),
+      ("load queue almost full",            () => io.lsu.ldq_full.reduce(_||_)),
+      ("store queue almost full",           () => io.lsu.stq_full.reduce(_||_)),
+      ("rob entry empty",                   () => rob.io.perf.empty),
+      ("rob entry full",                    () => rob.io.perf.full)
+    ))
+ 
+ 
+   val memorySystemEvents = new EventSet((mask, hits) => (mask & hits).orR, Seq(
+      ("MSHR reuse",           () => io.lsu.perf.mshrs_reuse),
+      ("MSHR load establish",  () => io.lsu.perf.mshrs_load_establish),
+      ("MSHR load reuse",      () => io.lsu.perf.mshrs_load_reuse),
+      ("MSHR store establish", () => io.lsu.perf.mshrs_store_establish),
+      ("MSHR store reuse",     () => io.lsu.perf.mshrs_store_reuse),
+      ("I$ miss",              () => io.ifu.perf.acquire),
+      ("D$ miss",              () => io.lsu.perf.acquire),
+      ("D$ release",           () => io.lsu.perf.release),
+      ("ITLB miss",            () => io.ifu.perf.tlbMiss),
+      ("DTLB miss",            () => io.lsu.perf.tlbMiss),
+      ("L2 TLB miss",          () => io.ptw.perf.l2miss)
+      ))
+ 
+   // split at ifu-fetuchBuffer < - > decode
+   val ifu_redirect_flush_stat = RegInit(false.B)
+   when(io.ifu.redirect_flush || io.ifu.sfence.valid){
+     ifu_redirect_flush_stat := true.B
+   } .elsewhen(io.ifu.fetchpacket.valid){
+     ifu_redirect_flush_stat := false.B
+   }
+ 
+ 
+   val uopsDispatched_valids = rob.io.enq_valids
+   val uopsDispatched_stall  = !uopsDispatched_valids.reduce(_||_)
+ 
+   val uopsIssued_valids = iss_valids ++ fp_pipeline.io.perf.iss_valids
+   val uopsIssued_stall  = !uopsIssued_valids.reduce(_||_)
+ 
+   val uopsExeActive_valids = if (usingFPU)
+       exe_units.map(u => u.io.req.valid) ++ fp_pipeline.io.perf.exe_units_req_valids
+     else
+       exe_units.map(u => u.io.req.valid)
+   val uopsExeActive_events: Seq[(String, () => Bool)] = uopsExeActive_valids.zipWithIndex.map{case(v,i) => ("Excution unit $i active cycle", () => v)}
+ 
+   val uops_executed_valids = rob.io.wb_resps.map(r => r.valid)
+   val uopsExecuted_sum_gtN = Wire(Vec(rob.numWakeupPorts, Bool()))
+   val uopsExecuted_sum_ltN = Wire(Vec(rob.numWakeupPorts, Bool()))
+   val uopsExecuted_sum = PopCount(uops_executed_valids)
+   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_gtN(n) := (uopsExecuted_sum > n.U))
+   val uopsExecuted_gt_events: Seq[(String, () => Bool)] = uopsExecuted_sum_gtN.zipWithIndex.map{case(v,i) => ("more than $i uops executed", () => v)}
+   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_ltN(n) := (uopsExecuted_sum <= n.U))
+   val uopsExecuted_lt_events: Seq[(String, () => Bool)] = uopsExecuted_sum_ltN.zipWithIndex.map{case(v,i) => ("less than or equal to $i uops executed", () => v)}
+   val uopsExecuted_stall = uopsExecuted_sum_ltN(0)
+ 
+   val uopsRetired_valids = rob.io.commit.valids
+   val uopsRetired_stall  = !uopsRetired_valids.reduce(_||_)
+ 
+ 
+   val br_insn_retired_cond_ntaken = Wire(Vec(coreWidth, Bool()))
+   val br_insn_retired_cond_taken = Wire(Vec(coreWidth, Bool()))
+   br_insn_retired_cond_taken  := (0 until coreWidth).map(w => retired_branch(w) && rob.io.commit.uops(w).taken)
+   br_insn_retired_cond_ntaken := (0 until coreWidth).map(w => retired_branch(w) && ~rob.io.commit.uops(w).taken)
+ 
+   val numArithDivider     = exe_units.count(_.hasDiv)
+   val arith_divder_active = Wire(Vec(numArithDivider, Bool()))
+   var exu_div_idx = 0
+   for (i <- 0 until exe_units.length) {
+     if (exe_units(i).hasDiv) {
+       arith_divder_active(exu_div_idx) := exe_units(i).io.perf.div_busy
+       exu_div_idx += 1
+     }
+   }
+   val arith_divder_active_events: Seq[(String, () => Bool)] = arith_divder_active.zipWithIndex.map{case(v,i) => ("cycles when $i divider unit is busy", () => v)}
+ 
+ 
+   val backend_stall   = dec_hazards.reduce(_||_)
+   val backend_nostall = !backend_stall
+   val fetch_no_deliver= (~dec_fire.reduce(_||_)) && backend_nostall && (~ifu_redirect_flush_stat)
+ 
+   val cycles_l1d_miss = false.B
+   val cycles_l2_miss  = false.B
+   val cycles_l3_miss  = false.B
+   val mem_stall_anyload = uopsIssued_stall && io.lsu.perf.ldq_nonempty
+   val mem_stall_stores  = uopsIssued_stall && io.lsu.perf.stq_full && (~mem_stall_anyload)
+   val mem_stall_l1d_miss = false.B
+   val mem_stall_l2_miss  = false.B
+   val mem_stall_l3_miss  = false.B
+ 
+   // linux perf events
+   val cpu_cycle        = false.B
+   val instructions     = false.B
+   val cache_references = false.B
+   val branches         = false.B
+   val branch_misses    = false.B
+   val bus_cycles       = false.B
+ 
+   val l1_icache_loads            = false.B
+   val l1_icache_load_misses      = false.B
+   val l1_icache_prefetches       = false.B
+   val l1_icache_prefetche_misses = false.B
+ 
+   val l1_dcache_loads            = false.B
+   val l1_dcache_load_misses      = false.B
+   val l1_dcache_stores           = false.B
+   val l1_dcache_store_misses     = false.B
+   val l1_dcache_prefetches       = false.B
+   val l1_dcache_prefetche_misses = false.B
+ 
+   val l2_cache_loads             = false.B
+   val l2_cache_load_misses       = false.B
+   val l2_cache_stores            = false.B
+   val l2_cache_store_misses      = false.B
+   val l2_cache_prefetches        = false.B
+   val l2_cache_prefetche_misses  = false.B
+ 
+   val dtlb_loads           = false.B
+   val dtlb_load_misses     = false.B
+   val dtlb_stores          = false.B
+   val dtlb_store_misses    = false.B
+   val dtlb_prefetches      = false.B
+   val dtlb_prefetch_misses = false.B
+ 
+   val itlb_loads           = false.B
+   val itlb_load_misses     = false.B
+ 
+   val branch_loads         = false.B
+   val branch_load_misses   = false.B
+ 
+   val topDownslotsVec = (0 until coreWidth).map(w => new EventSet((mask, hits) => (mask & hits).orR, Seq(
+     ("slots issued",                      () => dec_fire(w)),
+     ("fetch bubbles",                     () => (~dec_fire(w)) && backend_nostall && (~ifu_redirect_flush_stat)),
+     ("branch instruction retired",        () => retired_branch(w)),
+     ("taken conditional branch instructions retired",     () => br_insn_retired_cond_taken(w)),
+     ("not taken conditional branch instructions retired", () => br_insn_retired_cond_ntaken(w)),
+     ("Counts the number of dispatched",   () => uopsDispatched_valids(w)),
+     ("Counts the number of retirement",   () => uopsRetired_valids(w)))
+   ))
+       
+   val topDownIssVec = (0 until issueParams.map(_.issueWidth).sum).map(w => new EventSet((mask, hits) => (mask & hits).orR, Seq(
+     ("issued uops sum",            () => uopsIssued_valids(w)),
+     ("exe active sum",             () => uopsExeActive_valids(w))
+     )))
+ 
+   val br_misp_retired = brupdate.b2.mispredict
+   val br_misp_target = br_misp_retired && oldest_mispredict.cfi_type === CFI_JALR
+   val br_misp_dir    = br_misp_retired && oldest_mispredict.cfi_type === CFI_BR
+   val br_misp_retired_cond_taken  = br_misp_dir && brupdate.b2.taken
+   val br_misp_retired_cond_ntaken = br_misp_dir && (~brupdate.b2.taken)
+ 
+   val topDownCyclesEvents0 = new EventSet((mask, hits) => (mask & hits).orR, Seq(
+     ("recovery cycle",                     () => ifu_redirect_flush_stat),
+     ("fetch no Deliver cycle",             () => fetch_no_deliver),
+     ("branch mispred retired",             () => brupdate.b2.mispredict),
+     ("machine clears",                     () => rob.io.flush.valid),
+     ("none uops executed",                 () => uopsExecuted_stall),
+     ("few uops executed cycle",            () => uopsExecuted_sum_ltN(1)),
+     ("any load mem stall",                 () => mem_stall_anyload),
+     ("stores mem stall",                   () => mem_stall_stores),
+     ("l1d miss mem stall",                 () => mem_stall_l1d_miss),
+     ("l2 miss mem stall",                  () => mem_stall_l2_miss),
+     ("l3 miss mem stall",                  () => mem_stall_l3_miss),
+     ("mem latency",                        () => false.B),
+     ("control-flow target misprediction",  () => br_misp_target),
+     ("mispredicted conditional branch instructions retired", () => br_misp_dir),
+     ("taken conditional mispredicted branch instructions retired", () => br_misp_retired_cond_taken),
+     ("not taken conditional mispredicted branch instructions retired", () => br_misp_retired_cond_ntaken),
+     ("rob unit cause excution stall",      () => !rob.io.perf.ready),
+     ("not actually retired uops",          () => uopsRetired_stall)
+   ))
+ 
+   val topDownCyclesEvents1 = new EventSet((mask, hits) => (mask & hits).orR,
+     uopsExeActive_events
+     ++ uopsExecuted_gt_events
+     ++ arith_divder_active_events
+   )
+ 
+   val perfEvents = new SuperscalarEventSets(Seq(
+     (topDownslotsVec,           (m, n) => m +& n),
+     (Seq(topDownCyclesEvents0), (m, n) => m +& n),
+     (Seq(topDownCyclesEvents1), (m, n) => m +& n),
+     (topDownIssVec,             (m, n) => m +& n),
+     (insnCommitBaseEvents,      (m, n) => m +& n),
+     (Seq(micrArchEvents),       (m, n) => m +& n),
+     (Seq(resourceEvents),       (m, n) => m +& n),
+     (Seq(memorySystemEvents),   (m, n) => m +& n)
+   ))
+
+   val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents.toScalarEventSets, boomParams.customCSRs.decls))
+
+//  val perfEvents = new freechips.rocketchip.rocket.EventSets(Seq(
+//    new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+//      ("exception", () => rob.io.com_xcpt.valid),
+//      ("nop",       () => false.B),
+//      ("nop",       () => false.B),
+//      ("nop",       () => false.B))),
+//
+//    new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+////      ("I$ blocked",                        () => icache_blocked),
+//      ("nop",                               () => false.B),
+//      // ("branch misprediction",              () => br_unit.brinfo.mispredict),
+//      // ("control-flow target misprediction", () => br_unit.brinfo.mispredict &&
+//      //                                             br_unit.brinfo.cfi_type === CFI_JALR),
+//      ("flush",                             () => rob.io.flush.valid)
+//      //("branch resolved",                   () => br_unit.brinfo.valid)
+//    )),
+//
+//    new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+//      ("I$ miss",     () => io.ifu.perf.acquire),
+//      ("D$ miss",     () => io.lsu.perf.acquire),
+//      ("D$ release",  () => io.lsu.perf.release),
+//      ("ITLB miss",   () => io.ifu.perf.tlbMiss),
+//      ("DTLB miss",   () => io.lsu.perf.tlbMiss),
+//      ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
+//  val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents, boomParams.customCSRs.decls))
+
   csr.io.inst foreach { c => c := DontCare }
   csr.io.rocc_interrupt := io.rocc.interrupt
 
@@ -562,7 +837,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // stall fetch/dcode because we ran out of branch tags
   val branch_mask_full = Wire(Vec(coreWidth, Bool()))
 
-  val dec_hazards = (0 until coreWidth).map(w =>
+  dec_hazards := (0 until coreWidth).map(w =>
                       dec_valids(w) &&
                       (  !dis_ready
                       || rob.io.commit.rollback

@@ -53,6 +53,13 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
     val debug_tsc_reg    = Input(UInt(width=xLen.W))
     val debug_wb_wdata   = Output(Vec(numWakeupPorts, UInt((fLen+1).W)))
+
+    val perf = Output(new Bundle {
+      val iss_valids = Vec(fpIssueParams.issueWidth, Bool())
+      val exe_units_req_valids = Vec(fpIssueParams.issueWidth, Bool())
+      val iss_slots_empty = Bool()
+      val iss_slots_full  = Bool()
+    })
   })
 
   //**********************************
@@ -87,6 +94,11 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
   val iss_valids = Wire(Vec(exe_units.numFrfReaders, Bool()))
   val iss_uops   = Wire(Vec(exe_units.numFrfReaders, new MicroOp()))
+
+  io.perf.iss_valids := iss_valids
+  io.perf.exe_units_req_valids := exe_units.map(u => u.io.req.valid)
+  io.perf.iss_slots_full := issue_unit.io.perf.full
+  io.perf.iss_slots_empty := issue_unit.io.perf.empty
 
   issue_unit.io.tsc_reg := io.debug_tsc_reg
   issue_unit.io.brupdate := io.brupdate

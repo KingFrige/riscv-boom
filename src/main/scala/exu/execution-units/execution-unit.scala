@@ -136,6 +136,11 @@ abstract class ExecutionUnit(
 
     // TODO move this out of ExecutionUnit
     val com_exception = if (hasMem || hasRocc) Input(Bool()) else null
+    
+    // perf
+    val perf = Output(new Bundle {
+      val div_busy = if (hasDiv) Output(Bool()) else null
+    })
   })
 
   if (writesIrf)   {
@@ -369,6 +374,7 @@ class ALUExeUnit(
     div_resp_val := div.io.resp.valid
     div_busy     := !div.io.req.ready ||
                     (io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV))
+    io.perf.div_busy := div_busy
 
     iresp_fu_units += div
   }
