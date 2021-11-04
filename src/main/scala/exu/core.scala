@@ -257,6 +257,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val retired_mul = Wire(Vec(coreWidth, Bool()))
    val retired_div = Wire(Vec(coreWidth, Bool()))
  
+   val retired_fp_insn = Wire(Vec(coreWidth, Bool()))
    val retired_fp_store = Wire(Vec(coreWidth, Bool()))
    val retired_fp_load = Wire(Vec(coreWidth, Bool()))
    val retired_fp_add = Wire(Vec(coreWidth, Bool()))
@@ -280,13 +281,14 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      retired_mul(w)    := rob.io.commit.valids(w) && (rob.io.commit.uops(w).fu_code === FU_MUL) && int_insn(w)
      retired_div(w)    := rob.io.commit.valids(w) && (rob.io.commit.uops(w).fu_code === FU_DIV) && int_insn(w)
  
-     retired_fp_store(w) := rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w) && rob.io.commit.uops(w).uses_stq
-     retired_fp_load(w)  := rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w) && rob.io.commit.uops(w).uses_ldq
-     retired_fp_add(w)   := rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w) && rob.io.commit.uops(w).uopc.isOneOf(uopFADD_S, uopFSUB_S, uopFADD_D, uopFSUB_D)
-     retired_fp_mul(w)   := rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w) && rob.io.commit.uops(w).uopc.isOneOf(uopFMUL_S, uopFMUL_D)
-     retired_fp_madd(w)  := rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w) && rob.io.commit.uops(w).uopc.isOneOf(uopFMADD_S, uopFMSUB_S, uopFNMADD_S, uopFNMSUB_S, uopFMADD_D, uopFMSUB_D, uopFNMADD_D, uopFNMSUB_D)
-     retired_fp_div(w)   := rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w) && (rob.io.commit.uops(w).fu_code === FU_FDV)
-     retired_fp_other(w) := rob.io.commit.uops(w).fp_val && !(retired_fp_store(w) || retired_fp_load(w) || retired_fp_add(w) || retired_fp_mul(w) || retired_fp_div(w))
+     retired_fp_insn(w)  := rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w)
+     retired_fp_store(w) := retired_fp_insn(w) && rob.io.commit.uops(w).uses_stq
+     retired_fp_load(w)  := retired_fp_insn(w) && rob.io.commit.uops(w).uses_ldq
+     retired_fp_add(w)   := retired_fp_insn(w) && rob.io.commit.uops(w).uopc.isOneOf(uopFADD_S, uopFSUB_S, uopFADD_D, uopFSUB_D)
+     retired_fp_mul(w)   := retired_fp_insn(w) && rob.io.commit.uops(w).uopc.isOneOf(uopFMUL_S, uopFMUL_D)
+     retired_fp_madd(w)  := retired_fp_insn(w) && rob.io.commit.uops(w).uopc.isOneOf(uopFMADD_S, uopFMSUB_S, uopFNMADD_S, uopFNMSUB_S, uopFMADD_D, uopFMSUB_D, uopFNMADD_D, uopFNMSUB_D)
+     retired_fp_div(w)   := retired_fp_insn(w) && (rob.io.commit.uops(w).fu_code === FU_FDV)
+     retired_fp_other(w) := retired_fp_insn(w) && !(retired_fp_store(w) || retired_fp_load(w) || retired_fp_add(w) || retired_fp_mul(w) || retired_fp_div(w))
    }
 
    val insnCommitBaseEvents = (0 until coreWidth).map(w => new EventSet((mask, hits) => (mask & hits).orR, Seq(
@@ -301,7 +303,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       ("int mul",     () => retired_mul(w)),
       ("int div",     () => retired_div(w)))
       ++ (if (!usingFPU) Seq() else Seq(
-        ("fp insn",     () => rob.io.commit.uops(w).fp_val && rob.io.commit.valids(w)),
+        ("fp insn",     () => retired_fp_insn(w)),
         ("fp load",     () => retired_fp_load(w)),
         ("fp store",    () => retired_fp_store(w)),
         ("fp add",      () => retired_fp_add(w)),
