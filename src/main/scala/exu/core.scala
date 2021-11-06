@@ -358,7 +358,13 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    } .elsewhen(io.ifu.fetchpacket.valid){
      ifu_redirect_flush_stat := false.B
    }
- 
+
+
+   val uopsDelivered_sum_leN = Wire(Vec(coreWidth, Bool()))
+   val uopsDelivered_sum = PopCount(dec_fire)
+   (0 until coreWidth).map(n => uopsDelivered_sum_leN(n) := (uopsDelivered_sum <= n.U))
+   val uopsDelivered_le_events: Seq[(String, () => Bool)] = uopsDelivered_sum_leN.zipWithIndex.map{case(v,i) => ("less than or equal to $i uops delivered", () => v)}
+   val uopsDelivered_stall = uopsDelivered_sum_leN(0)
  
    val uopsDispatched_valids = rob.io.enq_valids
    val uopsDispatched_stall  = !uopsDispatched_valids.reduce(_||_)
@@ -499,7 +505,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    ))
  
    val topDownCyclesEvents1 = new EventSet((mask, hits) => (mask & hits).orR,
-     uopsExeActive_events
+     uopsDelivered_le_events
+     ++ uopsExeActive_events
      ++ uopsExecuted_ge_events
      ++ arith_divder_active_events
    )
