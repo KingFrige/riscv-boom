@@ -321,9 +321,11 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       ("front-end f4 is resteered",         () => io.ifu.perf.f4_clear)
     ))
  
+   val issueSlotsEmpty = issue_units.map(_.io.perf.empty).reduce(_ && _) && fp_pipeline.io.perf.iss_slots_empty
    val resourceEvents = new EventSet((mask, hits) => (mask & hits).orR, Seq(
       ("frontend fb full",                  () => io.ifu.perf.fb_full),
       ("frontend ftq full",                 () => io.ifu.perf.ftq_full),
+      ("issue slots empty",                 () => issueSlotsEmpty),
       ("int issue slots full",              () => int_iss_unit.io.perf.full),
       ("int issue slots empty",             () => int_iss_unit.io.perf.empty),
       ("mem issue slots full",              () => mem_iss_unit.io.perf.full),
