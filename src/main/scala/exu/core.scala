@@ -324,12 +324,12 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val resourceEvents = new EventSet((mask, hits) => (mask & hits).orR, Seq(
       ("frontend fb full",                  () => io.ifu.perf.fb_full),
       ("frontend ftq full",                 () => io.ifu.perf.ftq_full),
-      ("fp issue slots full",               () => fp_pipeline.io.perf.iss_slots_full),
-      ("fp issue slots empty",              () => fp_pipeline.io.perf.iss_slots_empty),
       ("int issue slots full",              () => int_iss_unit.io.perf.full),
       ("int issue slots empty",             () => int_iss_unit.io.perf.empty),
       ("mem issue slots full",              () => mem_iss_unit.io.perf.full),
       ("mem issue slots empty",             () => mem_iss_unit.io.perf.empty),
+      ("fp issue slots full",               () => fp_pipeline.io.perf.iss_slots_full),
+      ("fp issue slots empty",              () => fp_pipeline.io.perf.iss_slots_empty),
       ("load queue almost full",            () => io.lsu.ldq_full.reduce(_||_)),
       ("store queue almost full",           () => io.lsu.stq_full.reduce(_||_)),
       ("rob entry empty",                   () => rob.io.perf.empty),
@@ -373,14 +373,14 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val uopsExeActive_events: Seq[(String, () => Bool)] = uopsExeActive_valids.zipWithIndex.map{case(v,i) => ("Excution unit $i active cycle", () => v)}
  
    val uops_executed_valids = rob.io.wb_resps.map(r => r.valid)
-   val uopsExecuted_sum_gtN = Wire(Vec(rob.numWakeupPorts, Bool()))
-   val uopsExecuted_sum_ltN = Wire(Vec(rob.numWakeupPorts, Bool()))
+   val uopsExecuted_sum_geN = Wire(Vec(rob.numWakeupPorts, Bool()))
+   val uopsExecuted_sum_leN = Wire(Vec(rob.numWakeupPorts, Bool()))
    val uopsExecuted_sum = PopCount(uops_executed_valids)
-   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_gtN(n) := (uopsExecuted_sum > n.U))
-   val uopsExecuted_gt_events: Seq[(String, () => Bool)] = uopsExecuted_sum_gtN.zipWithIndex.map{case(v,i) => ("more than $i uops executed", () => v)}
-   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_ltN(n) := (uopsExecuted_sum <= n.U))
-   val uopsExecuted_lt_events: Seq[(String, () => Bool)] = uopsExecuted_sum_ltN.zipWithIndex.map{case(v,i) => ("less than or equal to $i uops executed", () => v)}
-   val uopsExecuted_stall = uopsExecuted_sum_ltN(0)
+   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_geN(n) := (uopsExecuted_sum >= n.U))
+   val uopsExecuted_ge_events: Seq[(String, () => Bool)] = uopsExecuted_sum_geN.zipWithIndex.map{case(v,i) => ("more than $i uops executed", () => v)}
+   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_leN(n) := (uopsExecuted_sum <= n.U))
+   val uopsExecuted_le_events: Seq[(String, () => Bool)] = uopsExecuted_sum_leN.zipWithIndex.map{case(v,i) => ("less than or equal to $i uops executed", () => v)}
+   val uopsExecuted_stall = uopsExecuted_sum_leN(0)
  
    val uopsRetired_valids = rob.io.commit.valids
    val uopsRetired_stall  = !uopsRetired_valids.reduce(_||_)
@@ -483,7 +483,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ("branch mispred retired",             () => brupdate.b2.mispredict),
      ("machine clears",                     () => rob.io.flush.valid),
      ("none uops executed",                 () => uopsExecuted_stall),
-     ("few uops executed cycle",            () => uopsExecuted_sum_ltN(1)),
+     ("few uops executed cycle",            () => uopsExecuted_sum_leN(1)),
      ("any load mem stall",                 () => mem_stall_anyload),
      ("stores mem stall",                   () => mem_stall_stores),
      ("l1d miss mem stall",                 () => mem_stall_l1d_miss),
@@ -500,7 +500,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
  
    val topDownCyclesEvents1 = new EventSet((mask, hits) => (mask & hits).orR,
      uopsExeActive_events
-     ++ uopsExecuted_gt_events
+     ++ uopsExecuted_ge_events
      ++ arith_divder_active_events
    )
  
