@@ -361,10 +361,13 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ifu_redirect_flush_stat := false.B
    }
 
-
+   val backend_stall   = dec_hazards.reduce(_||_)
+   val backend_nostall = !backend_stall
+   val fetch_no_deliver= (~dec_fire.reduce(_||_)) && backend_nostall && (~ifu_redirect_flush_stat)
+ 
    val uopsDelivered_sum_leN = Wire(Vec(coreWidth, Bool()))
    val uopsDelivered_sum = PopCount(dec_fire)
-   (0 until coreWidth).map(n => uopsDelivered_sum_leN(n) := (uopsDelivered_sum <= n.U))
+   (0 until coreWidth).map(n => uopsDelivered_sum_leN(n) := (uopsDelivered_sum <= n.U) && backend_nostall && (~ifu_redirect_flush_stat))
    val uopsDelivered_le_events: Seq[(String, () => Bool)] = uopsDelivered_sum_leN.zipWithIndex.map{case(v,i) => ("less than or equal to $i uops delivered", () => v)}
    val uopsDelivered_stall = uopsDelivered_sum_leN(0)
  
@@ -384,11 +387,10 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val uopsExecuted_sum_geN = Wire(Vec(rob.numWakeupPorts, Bool()))
    val uopsExecuted_sum_leN = Wire(Vec(rob.numWakeupPorts, Bool()))
    val uopsExecuted_sum = PopCount(uops_executed_valids)
-   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_geN(n) := (uopsExecuted_sum >= n.U))
-   val uopsExecuted_ge_events: Seq[(String, () => Bool)] = uopsExecuted_sum_geN.zipWithIndex.map{case(v,i) => ("more than $i uops executed", () => v)}
+   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_geN(n) := (uopsExecuted_sum >= (n.U+1.U)))
+   val uopsExecuted_ge_events: Seq[(String, () => Bool)] = uopsExecuted_sum_geN.zipWithIndex.map{case(v,i) => ("more than ${i+1} uops executed", () => v)}
    (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_leN(n) := (uopsExecuted_sum <= n.U))
    val uopsExecuted_le_events: Seq[(String, () => Bool)] = uopsExecuted_sum_leN.zipWithIndex.map{case(v,i) => ("less than or equal to $i uops executed", () => v)}
-   val uopsExecuted_stall = uopsExecuted_sum_leN(0)
  
    val uopsRetired_valids = rob.io.commit.valids
    val uopsRetired_stall  = !uopsRetired_valids.reduce(_||_)
@@ -410,10 +412,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    }
    val arith_divder_active_events: Seq[(String, () => Bool)] = arith_divder_active.zipWithIndex.map{case(v,i) => ("cycles when $i divider unit is busy", () => v)}
  
- 
-   val backend_stall   = dec_hazards.reduce(_||_)
-   val backend_nostall = !backend_stall
-   val fetch_no_deliver= (~dec_fire.reduce(_||_)) && backend_nostall && (~ifu_redirect_flush_stat)
  
    val cycles_l1d_miss = false.B
    val cycles_l2_miss  = false.B
@@ -490,8 +488,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ("fetch no Deliver cycle",             () => fetch_no_deliver),
      ("branch mispred retired",             () => brupdate.b2.mispredict),
      ("machine clears",                     () => rob.io.flush.valid),
-     ("none uops executed",                 () => uopsExecuted_stall),
-     ("few uops executed cycle",            () => uopsExecuted_sum_leN(1)),
      ("any load mem stall",                 () => mem_stall_anyload),
      ("stores mem stall",                   () => mem_stall_stores),
      ("l1d miss mem stall",                 () => mem_stall_l1d_miss),
@@ -507,9 +503,10 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    ))
  
    val topDownCyclesEvents1 = new EventSet((mask, hits) => (mask & hits).orR,
-     uopsDelivered_le_events
-     ++ uopsExeActive_events
-     ++ uopsExecuted_ge_events
+     uopsDelivered_le_events         // coreWidth
+     ++ uopsExeActive_events         // exu num
+     ++ uopsExecuted_ge_events       // rob.numWakeupPorts
+     ++ uopsExecuted_le_events       // rob.numWakeupPorts
      ++ arith_divder_active_events
    )
  
