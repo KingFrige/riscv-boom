@@ -510,7 +510,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      uopsDelivered_le_events               // coreWidth
      ++ uopsExeActive_events               // exu num
      ++ uopsExecuted_ge_events             // rob.numWakeupPorts
-     ++ uopsExecuted_le_events.slice(0,1)
+     ++ uopsExecuted_le_events.slice(0,2)  // 2 bit -> (0, 1)
      ++ arith_divder_active_events
    )
  
