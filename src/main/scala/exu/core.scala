@@ -354,20 +354,20 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       ))
  
    // split at ifu-fetuchBuffer < - > decode
-   val ifu_redirect_flush_stat = RegInit(false.B)
-   when(io.ifu.redirect_flush || io.ifu.sfence.valid){
-     ifu_redirect_flush_stat := true.B
-   } .elsewhen(io.ifu.fetchpacket.valid){
-     ifu_redirect_flush_stat := false.B
+   val resource_allocator_recovery_stat = RegInit(false.B)
+   when(brupdate.b2.mispredict){
+     resource_allocator_recovery_stat := true.B
+   } .elsewhen(dis_fire.reduce(_||_)){
+     resource_allocator_recovery_stat := false.B
    }
 
    val backend_stall   = dec_hazards.reduce(_||_)
    val backend_nostall = !backend_stall
-   val fetch_no_deliver= (~dec_fire.reduce(_||_)) && backend_nostall && (~ifu_redirect_flush_stat)
+   val fetch_no_deliver= (~dec_fire.reduce(_||_)) && backend_nostall
  
    val uopsDelivered_sum_leN = Wire(Vec(coreWidth, Bool()))
    val uopsDelivered_sum = PopCount(dec_fire)
-   (0 until coreWidth).map(n => uopsDelivered_sum_leN(n) := (uopsDelivered_sum <= n.U) && backend_nostall && (~ifu_redirect_flush_stat))
+   (0 until coreWidth).map(n => uopsDelivered_sum_leN(n) := (uopsDelivered_sum <= n.U) && backend_nostall)
    val uopsDelivered_le_events: Seq[(String, () => Bool)] = uopsDelivered_sum_leN.zipWithIndex.map{case(v,i) => ("less than or equal to $i uops delivered", () => v)}
    val uopsDelivered_stall = uopsDelivered_sum_leN(0)
  
@@ -464,7 +464,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
  
    val topDownslotsVec = (0 until coreWidth).map(w => new EventSet((mask, hits) => (mask & hits).orR, Seq(
      ("slots issued",                      () => dec_fire(w)),
-     ("fetch bubbles",                     () => (~dec_fire(w)) && backend_nostall && (~ifu_redirect_flush_stat)),
+     ("fetch bubbles",                     () => (~dec_fire(w)) && backend_nostall),
      ("branch instruction retired",        () => retired_branch(w)),
      ("taken conditional branch instructions retired",     () => br_insn_retired_cond_taken(w)),
      ("not taken conditional branch instructions retired", () => br_insn_retired_cond_ntaken(w)),
@@ -488,7 +488,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val br_misp_retired_cond_ntaken = br_misp_dir && (~brupdate.b2.taken)
  
    val topDownCyclesEvents0 = new EventSet((mask, hits) => (mask & hits).orR, Seq(
-     ("recovery cycle",                     () => ifu_redirect_flush_stat),
+     ("recovery cycle",                     () => resource_allocator_recovery_stat),
      ("fetch no Deliver cycle",             () => fetch_no_deliver),
      ("branch mispred retired",             () => brupdate.b2.mispredict),
      ("machine clears",                     () => rob.io.flush.valid),
