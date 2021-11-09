@@ -383,10 +383,10 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
        exe_units.map(u => u.io.req.valid)
    val uopsExeActive_events: Seq[(String, () => Bool)] = uopsExeActive_valids.zipWithIndex.map{case(v,i) => ("Excution unit $i active cycle", () => v)}
  
-   val uops_executed_valids = rob.io.wb_resps.map(r => r.valid)
+   val uopsExecuted_valids = rob.io.wb_resps.map(r => r.valid)
    val uopsExecuted_sum_geN = Wire(Vec(rob.numWakeupPorts, Bool()))
    val uopsExecuted_sum_leN = Wire(Vec(rob.numWakeupPorts, Bool()))
-   val uopsExecuted_sum = PopCount(uops_executed_valids)
+   val uopsExecuted_sum = PopCount(uopsExecuted_valids)
    (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_geN(n) := (uopsExecuted_sum >= (n.U+1.U)))
    val uopsExecuted_ge_events: Seq[(String, () => Bool)] = uopsExecuted_sum_geN.zipWithIndex.map{case(v,i) => ("more than ${i+1} uops executed", () => v)}
    (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_leN(n) := (uopsExecuted_sum <= n.U))
@@ -476,6 +476,10 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ("issued uops sum",            () => uopsIssued_valids(w)),
      ("exe active sum",             () => uopsExeActive_valids(w))
      )))
+
+   val topDownWBVec = (0 until rob.numWakeupPorts).map(w => new EventSet((mask, hits) => (mask & hits).orR, Seq(
+     ("executed sum",               () => uopsExecuted_valids(w))
+     )))
  
    val br_misp_retired = brupdate.b2.mispredict
    val br_misp_target = br_misp_retired && oldest_mispredict.cfi_type === CFI_JALR
@@ -503,10 +507,10 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    ))
  
    val topDownCyclesEvents1 = new EventSet((mask, hits) => (mask & hits).orR,
-     uopsDelivered_le_events         // coreWidth
-     ++ uopsExeActive_events         // exu num
-     ++ uopsExecuted_ge_events       // rob.numWakeupPorts
-     ++ uopsExecuted_le_events       // rob.numWakeupPorts
+     uopsDelivered_le_events               // coreWidth
+     ++ uopsExeActive_events               // exu num
+     ++ uopsExecuted_ge_events             // rob.numWakeupPorts
+     ++ uopsExecuted_le_events.slice(0,1)
      ++ arith_divder_active_events
    )
  
@@ -515,6 +519,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      (Seq(topDownCyclesEvents0), (m, n) => m +& n),
      (Seq(topDownCyclesEvents1), (m, n) => m +& n),
      (topDownIssVec,             (m, n) => m +& n),
+     (topDownWBVec,              (m, n) => m +& n),
      (insnCommitBaseEvents,      (m, n) => m +& n),
      (Seq(micrArchEvents),       (m, n) => m +& n),
      (Seq(resourceEvents),       (m, n) => m +& n),
