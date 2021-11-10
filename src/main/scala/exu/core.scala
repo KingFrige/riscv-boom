@@ -376,7 +376,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
  
    val uopsIssued_valids = iss_valids ++ fp_pipeline.io.perf.iss_valids
    val uopsIssued_stall  = !uopsIssued_valids.reduce(_||_)
-
    val uopsIssued_sum_leN = Wire(Vec(issueParams.map(_.issueWidth).sum, Bool()))
    val uopsIssued_sum = PopCount(uopsIssued_valids)
    (0 until issueParams.map(_.issueWidth).sum).map(n => uopsIssued_sum_leN(n) := (uopsIssued_sum <= n.U))
@@ -384,7 +383,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
    val uopsIssued_stall_on_loads = uopsIssued_stall && io.lsu.perf.ldq_nonempty && rob.io.perf.com_load_is_at_rob_head
    val uopsIssued_stall_on_stores  = uopsIssued_stall && io.lsu.perf.stq_full && (~uopsIssued_stall_on_loads)
- 
+
    val uopsExeActive_valids = if (usingFPU)
        exe_units.map(u => u.io.req.valid) ++ fp_pipeline.io.perf.exe_units_req_valids
      else
@@ -399,6 +398,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val uopsExecuted_ge_events: Seq[(String, () => Bool)] = uopsExecuted_sum_geN.zipWithIndex.map{case(v,i) => ("more than ${i+1} uops executed", () => v)}
    (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_leN(n) := (uopsExecuted_sum <= n.U))
    val uopsExecuted_le_events: Seq[(String, () => Bool)] = uopsExecuted_sum_leN.zipWithIndex.map{case(v,i) => ("less than or equal to $i uops executed", () => v)}
+   val uopsExecuted_stall = uopsExecuted_sum_leN(0)
+   val uopsExecuted_stall_on_loads   = uopsExecuted_stall && io.lsu.perf.ldq_nonempty && rob.io.perf.com_load_is_at_rob_head
+   val uopsExecuted_stall_on_stores  = uopsExecuted_stall && io.lsu.perf.stq_full && (~uopsExecuted_stall_on_loads)
  
    val uopsRetired_valids = rob.io.commit.valids
    val uopsRetired_stall  = !uopsRetired_valids.reduce(_||_)
@@ -498,8 +500,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ("fetch no Deliver cycle",             () => fetch_no_deliver),
      ("branch mispred retired",             () => brupdate.b2.mispredict),
      ("machine clears",                     () => rob.io.flush.valid),
-     ("any load mem stall",                 () => uopsIssued_stall_on_loads),
-     ("stores mem stall",                   () => uopsIssued_stall_on_stores),
+     ("any load mem stall",                 () => uopsExecuted_stall_on_loads),
+     ("stores mem stall",                   () => uopsExecuted_stall_on_stores),
      ("l1d miss mem stall",                 () => mem_stall_l1d_miss),
      ("l2 miss mem stall",                  () => mem_stall_l2_miss),
      ("l3 miss mem stall",                  () => mem_stall_l3_miss),
@@ -509,7 +511,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ("taken conditional mispredicted branch instructions retired", () => br_misp_retired_cond_taken),
      ("not taken conditional mispredicted branch instructions retired", () => br_misp_retired_cond_ntaken),
      ("rob unit cause excution stall",      () => !rob.io.perf.ready),
-     ("not actually retired uops",          () => uopsRetired_stall)
+     ("not actually retired uops",          () => uopsRetired_stall),
+     ("any load mem stall on issue",        () => uopsIssued_stall_on_loads),
+     ("stores mem stall on issue",          () => uopsIssued_stall_on_stores)
    ))
  
    val topDownCyclesEvents1 = new EventSet((mask, hits) => (mask & hits).orR,
