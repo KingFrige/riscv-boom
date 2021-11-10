@@ -274,7 +274,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      retired_amo(w)    := rob.io.commit.valids(w) && rob.io.commit.uops(w).is_amo && int_insn(w)
      csr_insn(w)       := (rob.io.commit.uops(w).ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N)
      retired_system(w) := rob.io.commit.valids(w) && csr_insn(w)
-     retired_arith(w)  := rob.io.commit.valids(w) && int_insn(w) && !(rob.io.commit.uops(w).is_jal || rob.io.commit.uops(w).is_jalr || rob.io.commit.uops(w).uses_stq || rob.io.commit.uops(w).uses_ldq || rob.io.commit.uops(w).is_amo || csr_insn(w))
+     retired_arith(w)  := rob.io.commit.valids(w) && int_insn(w) && !(rob.io.commit.uops(w).uses_ldq || rob.io.commit.uops(w).uses_stq || rob.io.commit.uops(w).is_amo || csr_insn(w) || rob.io.commit.uops(w).is_br || rob.io.commit.uops(w).is_jal || rob.io.commit.uops(w).is_jalr)
      retired_branch(w) := rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br
      retired_jal(w)    := rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jal
      retired_jalr(w)   := rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jalr
