@@ -416,7 +416,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val cycles_l1d_miss = false.B
    val cycles_l2_miss  = false.B
    val cycles_l3_miss  = false.B
-   val mem_stall_anyload = uopsIssued_stall && io.lsu.perf.ldq_nonempty
+   val mem_stall_anyload = uopsIssued_stall && io.lsu.perf.ldq_nonempty && rob.io.perf.com_load_is_at_rob_head
    val mem_stall_stores  = uopsIssued_stall && io.lsu.perf.stq_full && (~mem_stall_anyload)
    val mem_stall_l1d_miss = false.B
    val mem_stall_l2_miss  = false.B

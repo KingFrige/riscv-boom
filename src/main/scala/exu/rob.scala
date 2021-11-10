@@ -115,6 +115,7 @@ class RobIo(
     val empty = Bool()
     val full  = Bool()
     val ready = Bool()
+    val com_load_is_at_rob_head = Bool()
   })
 }
 
@@ -799,10 +800,6 @@ class Rob(
   io.empty        := empty
   io.ready        := (rob_state === s_normal) && !full && !r_xcpt_val
 
-  io.perf.empty := empty
-  io.perf.full  := full
-  io.perf.ready := io.ready
-
   //-----------------------------------------------
   //-----------------------------------------------
   //-----------------------------------------------
@@ -875,6 +872,11 @@ class Rob(
   io.com_load_is_at_rob_head := RegNext(rob_head_uses_ldq(PriorityEncoder(rob_head_vals.asUInt)) &&
                                         !will_commit.reduce(_||_))
 
+
+  io.perf.empty := empty
+  io.perf.full  := full
+  io.perf.ready := io.ready
+  io.perf.com_load_is_at_rob_head := io.com_load_is_at_rob_head
 
 
   override def toString: String = BoomCoreStringPrefix(
