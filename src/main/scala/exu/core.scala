@@ -377,6 +377,11 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val uopsIssued_valids = iss_valids ++ fp_pipeline.io.perf.iss_valids
    val uopsIssued_stall  = !uopsIssued_valids.reduce(_||_)
 
+   val uopsIssued_sum_leN = Wire(Vec(issueParams.map(_.issueWidth).sum, Bool()))
+   val uopsIssued_sum = PopCount(uopsIssued_valids)
+   (0 until issueParams.map(_.issueWidth).sum).map(n => uopsIssued_sum_leN(n) := (uopsIssued_sum <= n.U))
+   val uopsIssued_le_events: Seq[(String, () => Bool)] = uopsIssued_sum_leN.zipWithIndex.map{case(v,i) => ("less than or equal to $i uops issued", () => v)}
+
    val uopsIssued_stall_on_loads = uopsIssued_stall && io.lsu.perf.ldq_nonempty && rob.io.perf.com_load_is_at_rob_head
    val uopsIssued_stall_on_stores  = uopsIssued_stall && io.lsu.perf.stq_full && (~uopsIssued_stall_on_loads)
  
@@ -509,9 +514,10 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
  
    val topDownCyclesEvents1 = new EventSet((mask, hits) => (mask & hits).orR,
      uopsDelivered_le_events               // coreWidth
+     ++ uopsIssued_le_events.slice(0,2)      // 2 bit -> [0, 1]
      ++ uopsExeActive_events               // exu num
      ++ uopsExecuted_ge_events             // rob.numWakeupPorts
-     ++ uopsExecuted_le_events.slice(0,2)  // 2 bit -> (0, 1)
+     ++ uopsExecuted_le_events.slice(0,2)  // 2 bit -> [0, 1]
      ++ arith_divder_active_events
    )
  
