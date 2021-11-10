@@ -376,6 +376,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
  
    val uopsIssued_valids = iss_valids ++ fp_pipeline.io.perf.iss_valids
    val uopsIssued_stall  = !uopsIssued_valids.reduce(_||_)
+
+   val uopsIssued_stall_on_loads = uopsIssued_stall && io.lsu.perf.ldq_nonempty && rob.io.perf.com_load_is_at_rob_head
+   val uopsIssued_stall_on_stores  = uopsIssued_stall && io.lsu.perf.stq_full && (~uopsIssued_stall_on_loads)
  
    val uopsExeActive_valids = if (usingFPU)
        exe_units.map(u => u.io.req.valid) ++ fp_pipeline.io.perf.exe_units_req_valids
@@ -416,8 +419,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val cycles_l1d_miss = false.B
    val cycles_l2_miss  = false.B
    val cycles_l3_miss  = false.B
-   val mem_stall_anyload = uopsIssued_stall && io.lsu.perf.ldq_nonempty && rob.io.perf.com_load_is_at_rob_head
-   val mem_stall_stores  = uopsIssued_stall && io.lsu.perf.stq_full && (~mem_stall_anyload)
    val mem_stall_l1d_miss = false.B
    val mem_stall_l2_miss  = false.B
    val mem_stall_l3_miss  = false.B
@@ -492,8 +493,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ("fetch no Deliver cycle",             () => fetch_no_deliver),
      ("branch mispred retired",             () => brupdate.b2.mispredict),
      ("machine clears",                     () => rob.io.flush.valid),
-     ("any load mem stall",                 () => mem_stall_anyload),
-     ("stores mem stall",                   () => mem_stall_stores),
+     ("any load mem stall",                 () => uopsIssued_stall_on_loads),
+     ("stores mem stall",                   () => uopsIssued_stall_on_stores),
      ("l1d miss mem stall",                 () => mem_stall_l1d_miss),
      ("l2 miss mem stall",                  () => mem_stall_l2_miss),
      ("l3 miss mem stall",                  () => mem_stall_l3_miss),
