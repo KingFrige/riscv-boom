@@ -321,11 +321,15 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       ("front-end f4 is resteered",         () => io.ifu.perf.f4_clear)
     ))
  
-   val issueSlotsEmpty = issue_units.map(_.io.perf.empty).reduce(_ && _) && fp_pipeline.io.perf.iss_slots_empty
+   val intIssueSlotsEmpty = int_iss_unit.io.perf.empty
+   val memIssueSlotsEmpty = mem_iss_unit.io.perf.empty
+   val fpIssueSlotsEmpty  = fp_pipeline.io.perf.iss_slots_empty
+   val allIssueSlotsEmpty = intIssueSlotsEmpty && memIssueSlotsEmpty && fpIssueSlotsEmpty
+
    val resourceEvents = new EventSet((mask, hits) => (mask & hits).orR, Seq(
       ("frontend fb full",                  () => io.ifu.perf.fb_full),
       ("frontend ftq full",                 () => io.ifu.perf.ftq_full),
-      ("issue slots empty",                 () => issueSlotsEmpty),
+      ("issue slots empty",                 () => allIssueSlotsEmpty),
       ("int issue slots full",              () => int_iss_unit.io.perf.full),
       ("int issue slots empty",             () => int_iss_unit.io.perf.empty),
       ("mem issue slots full",              () => mem_iss_unit.io.perf.full),
@@ -354,13 +358,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       ))
  
    // split at ifu-fetuchBuffer < - > decode
-   val resource_allocator_recovery_stat = RegInit(false.B)
-   when(brupdate.b2.mispredict){
-     resource_allocator_recovery_stat := true.B
-   } .elsewhen(dis_fire.reduce(_||_)){
-     resource_allocator_recovery_stat := false.B
-   }
-
    val backend_stall   = dec_hazards.reduce(_||_)
    val backend_nostall = !backend_stall
    val fetch_no_deliver= (~dec_fire.reduce(_||_)) && backend_nostall
@@ -373,14 +370,18 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
  
    val uopsDispatched_valids = rob.io.enq_valids
    val uopsDispatched_stall  = !uopsDispatched_valids.reduce(_||_)
- 
-   val uopsIssued_valids = iss_valids ++ fp_pipeline.io.perf.iss_valids
-   val uopsIssued_stall  = !uopsIssued_valids.reduce(_||_)
+
+   val mem_iss_valids = mem_iss_unit.io.iss_valids
+   val int_iss_valids = int_iss_unit.io.iss_valids
+   val fp_iss_valids  = fp_pipeline.io.perf.iss_valids
+
+   val uopsIssued_valids = mem_iss_valids ++ int_iss_valids ++ fp_iss_valids
    val uopsIssued_sum_leN = Wire(Vec(issueParams.map(_.issueWidth).sum, Bool()))
    val uopsIssued_sum = PopCount(uopsIssued_valids)
-   (0 until issueParams.map(_.issueWidth).sum).map(n => uopsIssued_sum_leN(n) := (uopsIssued_sum <= n.U) && ~issueSlotsEmpty)
+   (0 until issueParams.map(_.issueWidth).sum).map(n => uopsIssued_sum_leN(n) := (uopsIssued_sum <= n.U) && ~allIssueSlotsEmpty)
    val uopsIssued_le_events: Seq[(String, () => Bool)] = uopsIssued_sum_leN.zipWithIndex.map{case(v,i) => ("less than or equal to $i uops issued", () => v)}
 
+   val uopsIssued_stall  = uopsIssued_sum_leN(0)
    val uopsIssued_stall_on_loads = uopsIssued_stall && io.lsu.perf.ldq_nonempty && rob.io.perf.com_load_is_at_rob_head
    val uopsIssued_stall_on_stores  = uopsIssued_stall && io.lsu.perf.stq_full && (~uopsIssued_stall_on_loads)
 
@@ -394,9 +395,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val uopsExecuted_sum_geN = Wire(Vec(rob.numWakeupPorts, Bool()))
    val uopsExecuted_sum_leN = Wire(Vec(rob.numWakeupPorts, Bool()))
    val uopsExecuted_sum = PopCount(uopsExecuted_valids)
-   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_geN(n) := (uopsExecuted_sum >= (n.U+1.U)) && ~issueSlotsEmpty)
+   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_geN(n) := (uopsExecuted_sum >= (n.U+1.U)) && ~allIssueSlotsEmpty)
    val uopsExecuted_ge_events: Seq[(String, () => Bool)] = uopsExecuted_sum_geN.zipWithIndex.map{case(v,i) => ("more than ${i+1} uops executed", () => v)}
-   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_leN(n) := (uopsExecuted_sum <= n.U) && ~issueSlotsEmpty)
+   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_leN(n) := (uopsExecuted_sum <= n.U) && ~allIssueSlotsEmpty)
    val uopsExecuted_le_events: Seq[(String, () => Bool)] = uopsExecuted_sum_leN.zipWithIndex.map{case(v,i) => ("less than or equal to $i uops executed", () => v)}
    val uopsExecuted_stall = uopsExecuted_sum_leN(0)
    val uopsExecuted_stall_on_loads   = uopsExecuted_stall && io.lsu.perf.ldq_nonempty && rob.io.perf.com_load_is_at_rob_head
@@ -405,6 +406,13 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val uopsRetired_valids = rob.io.commit.valids
    val uopsRetired_stall  = !uopsRetired_valids.reduce(_||_)
  
+   val resource_allocator_recovery_stat = RegInit(false.B)
+   when(brupdate.b2.mispredict){
+     resource_allocator_recovery_stat := true.B
+   } .elsewhen(uopsIssued_valids.reduce(_||_)){
+     resource_allocator_recovery_stat := false.B
+   }
+
  
    val br_insn_retired_cond_ntaken = Wire(Vec(coreWidth, Bool()))
    val br_insn_retired_cond_taken = Wire(Vec(coreWidth, Bool()))
