@@ -427,6 +427,13 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val uopsRetired_valids = rob.io.commit.valids
    val uopsRetired_stall  = !uopsRetired_valids.reduce(_||_)
  
+   val ifu_clear_resteers_stat = RegInit(false.B)
+   when(io.ifu.redirect_flush || io.ifu.sfence.valid){
+     ifu_clear_resteers_stat := true.B
+   } .elsewhen(dec_fire.reduce(_||_)){
+     ifu_clear_resteers_stat:= false.B
+   }
+
    val resource_allocator_recovery_stat = RegInit(false.B)
    when(brupdate.b2.mispredict){
      resource_allocator_recovery_stat := true.B
@@ -486,6 +493,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val br_misp_retired_cond_ntaken = br_misp_dir && (~brupdate.b2.taken)
  
    val topDownCyclesEvents0 = new EventSet((mask, hits) => (mask & hits).orR, Seq(
+     ("clear resteers cycle",               () => ifu_clear_resteers_stat),
      ("recovery cycle",                     () => resource_allocator_recovery_stat),
      ("fetch no Deliver cycle",             () => fetch_no_deliver),
      ("branch mispred retired",             () => brupdate.b2.mispredict),
