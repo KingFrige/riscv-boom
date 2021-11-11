@@ -448,15 +448,15 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    br_insn_retired_cond_ntaken := (0 until coreWidth).map(w => retired_branch(w) && ~rob.io.commit.uops(w).taken)
  
    val numArithDivider     = exe_units.count(_.hasDiv)
-   val arith_divder_active = Wire(Vec(numArithDivider, Bool()))
+   val arith_divider_active = Wire(Vec(numArithDivider, Bool()))
    var exu_div_idx = 0
    for (i <- 0 until exe_units.length) {
      if (exe_units(i).hasDiv) {
-       arith_divder_active(exu_div_idx) := exe_units(i).io.perf.div_busy
+       arith_divider_active(exu_div_idx) := exe_units(i).io.perf.div_busy
        exu_div_idx += 1
      }
    }
-   val arith_divder_active_events: Seq[(String, () => Bool)] = arith_divder_active.zipWithIndex.map{case(v,i) => ("cycles when $i divider unit is busy", () => v)}
+   val arith_divider_active_events: Seq[(String, () => Bool)] = arith_divider_active.zipWithIndex.map{case(v,i) => ("cycles when $i divider unit is busy", () => v)}
  
  
    val cycles_l1d_miss = false.B
@@ -520,7 +520,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ++ uopsExeActive_events               // exu num
      ++ uopsExecuted_ge_events             // rob.numWakeupPorts
      ++ uopsExecuted_le_events.slice(0,2)  // 2 bit -> [0, 1]
-     ++ arith_divder_active_events
+     ++ arith_divider_active_events
    )
  
    val perfEvents = new SuperscalarEventSets(Seq(
