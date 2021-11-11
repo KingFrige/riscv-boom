@@ -381,7 +381,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    // split at ifu-fetuchBuffer < - > decode
    val backend_stall   = dec_hazards.reduce(_||_)
    val backend_nostall = !backend_stall
-   val fetch_no_deliver= (~dec_fire.reduce(_||_)) && backend_nostall
+   val fb_uopsNoDelivered= (~dec_fire.reduce(_||_)) && backend_nostall
  
    val uopsDelivered_sum_leN = Wire(Vec(coreWidth, Bool()))
    val uopsDelivered_sum = PopCount(dec_fire)
@@ -428,7 +428,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val uopsRetired_stall  = !uopsRetired_valids.reduce(_||_)
  
    val ifu_clear_resteers_stat = RegInit(false.B)
-   when(io.ifu.redirect_flush || io.ifu.sfence.valid){
+   when((io.ifu.redirect_flush || io.ifu.sfence.valid) && fb_uopsNoDelivered){
      ifu_clear_resteers_stat := true.B
    } .elsewhen(dec_fire.reduce(_||_)){
      ifu_clear_resteers_stat:= false.B
@@ -495,7 +495,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val topDownCyclesEvents0 = new EventSet((mask, hits) => (mask & hits).orR, Seq(
      ("clear resteers cycle",               () => ifu_clear_resteers_stat),
      ("recovery cycle",                     () => resource_allocator_recovery_stat),
-     ("fetch no Deliver cycle",             () => fetch_no_deliver),
+     ("fb uops no Delivered cycle",         () => fb_uopsNoDelivered),
      ("branch mispred retired",             () => brupdate.b2.mispredict),
      ("machine clears",                     () => rob.io.flush.valid),
      ("any load mem stall",                 () => uopsExecuted_stall_on_loads),
