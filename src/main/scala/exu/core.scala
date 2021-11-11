@@ -491,6 +491,11 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val br_misp_dir    = br_misp_retired && oldest_mispredict.cfi_type === CFI_BR
    val br_misp_retired_cond_taken  = br_misp_dir && brupdate.b2.taken
    val br_misp_retired_cond_ntaken = br_misp_dir && (~brupdate.b2.taken)
+
+   val resource_any_stalls = false.B
+   val resource_rob_stalls = false.B
+   val resource_issueslots_stalls = false.B
+   val resource_storebuffer_stalls = false.B
  
    val topDownCyclesEvents0 = new EventSet((mask, hits) => (mask & hits).orR, Seq(
      ("clear resteers cycle",               () => ifu_clear_resteers_stat),
