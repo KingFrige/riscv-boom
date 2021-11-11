@@ -349,12 +349,33 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       ("MSHR load reuse",      () => io.lsu.perf.mshrs_load_reuse),
       ("MSHR store establish", () => io.lsu.perf.mshrs_store_establish),
       ("MSHR store reuse",     () => io.lsu.perf.mshrs_store_reuse),
-      ("I$ miss",              () => io.ifu.perf.acquire),
-      ("D$ miss",              () => io.lsu.perf.acquire),
+      ("I$ loads",             () => false.B),
+      ("I$ load miss",         () => io.ifu.perf.acquire),
+      ("I$ prefetches",        () => false.B),
+      ("I$ prefetches miss",   () => false.B),
+      ("D$ loads",             () => false.B),
+      ("D$ load miss",         () => io.lsu.perf.acquire),
+      ("D$ stores",            () => false.B),
+      ("D$ store miss",        () => false.B),
+      ("D$ prefetches",        () => false.B),
+      ("D$ prefetches miss",   () => false.B),
       ("D$ release",           () => io.lsu.perf.release),
-      ("ITLB miss",            () => io.ifu.perf.tlbMiss),
-      ("DTLB miss",            () => io.lsu.perf.tlbMiss),
-      ("L2 TLB miss",          () => io.ptw.perf.l2miss)
+      ("L2 loads",             () => false.B),
+      ("L2 load miss",         () => false.B),
+      ("L2 stores",            () => false.B),
+      ("L2 store miss",        () => false.B),
+      ("L2 prefetches",        () => false.B),
+      ("L2 prefetches miss",   () => false.B),
+      ("ITLB loads",           () => false.B),
+      ("ITLB load miss",       () => io.ifu.perf.tlbMiss),
+      ("DTLB loads",           () => false.B),
+      ("DTLB load miss",       () => io.lsu.perf.tlbMiss),
+      ("DTLB stores",          () => false.B),
+      ("DTLB store miss",      () => false.B),
+      ("L2 TLB load",          () => false.B),
+      ("L2 TLB miss",          () => io.ptw.perf.l2miss),
+      ("L2 TLB stores",        () => false.B),
+      ("L2 TLB store miss",    () => false.B)
       ))
  
    // split at ifu-fetuchBuffer < - > decode
@@ -438,45 +459,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val mem_stall_l2_miss  = false.B
    val mem_stall_l3_miss  = false.B
  
-   // linux perf events
-   val cpu_cycle        = false.B
-   val instructions     = false.B
-   val cache_references = false.B
-   val branches         = false.B
-   val branch_misses    = false.B
-   val bus_cycles       = false.B
- 
-   val l1_icache_loads            = false.B
-   val l1_icache_load_misses      = false.B
-   val l1_icache_prefetches       = false.B
-   val l1_icache_prefetche_misses = false.B
- 
-   val l1_dcache_loads            = false.B
-   val l1_dcache_load_misses      = false.B
-   val l1_dcache_stores           = false.B
-   val l1_dcache_store_misses     = false.B
-   val l1_dcache_prefetches       = false.B
-   val l1_dcache_prefetche_misses = false.B
- 
-   val l2_cache_loads             = false.B
-   val l2_cache_load_misses       = false.B
-   val l2_cache_stores            = false.B
-   val l2_cache_store_misses      = false.B
-   val l2_cache_prefetches        = false.B
-   val l2_cache_prefetche_misses  = false.B
- 
-   val dtlb_loads           = false.B
-   val dtlb_load_misses     = false.B
-   val dtlb_stores          = false.B
-   val dtlb_store_misses    = false.B
-   val dtlb_prefetches      = false.B
-   val dtlb_prefetch_misses = false.B
- 
-   val itlb_loads           = false.B
-   val itlb_load_misses     = false.B
- 
-   val branch_loads         = false.B
-   val branch_load_misses   = false.B
  
    val topDownslotsVec = (0 until coreWidth).map(w => new EventSet((mask, hits) => (mask & hits).orR, Seq(
      ("slots issued",                      () => dec_fire(w)),
