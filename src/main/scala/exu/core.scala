@@ -378,7 +378,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val uopsIssued_stall  = !uopsIssued_valids.reduce(_||_)
    val uopsIssued_sum_leN = Wire(Vec(issueParams.map(_.issueWidth).sum, Bool()))
    val uopsIssued_sum = PopCount(uopsIssued_valids)
-   (0 until issueParams.map(_.issueWidth).sum).map(n => uopsIssued_sum_leN(n) := (uopsIssued_sum <= n.U))
+   (0 until issueParams.map(_.issueWidth).sum).map(n => uopsIssued_sum_leN(n) := (uopsIssued_sum <= n.U) && ~issueSlotsEmpty)
    val uopsIssued_le_events: Seq[(String, () => Bool)] = uopsIssued_sum_leN.zipWithIndex.map{case(v,i) => ("less than or equal to $i uops issued", () => v)}
 
    val uopsIssued_stall_on_loads = uopsIssued_stall && io.lsu.perf.ldq_nonempty && rob.io.perf.com_load_is_at_rob_head
@@ -394,9 +394,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val uopsExecuted_sum_geN = Wire(Vec(rob.numWakeupPorts, Bool()))
    val uopsExecuted_sum_leN = Wire(Vec(rob.numWakeupPorts, Bool()))
    val uopsExecuted_sum = PopCount(uopsExecuted_valids)
-   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_geN(n) := (uopsExecuted_sum >= (n.U+1.U)))
+   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_geN(n) := (uopsExecuted_sum >= (n.U+1.U)) && ~issueSlotsEmpty)
    val uopsExecuted_ge_events: Seq[(String, () => Bool)] = uopsExecuted_sum_geN.zipWithIndex.map{case(v,i) => ("more than ${i+1} uops executed", () => v)}
-   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_leN(n) := (uopsExecuted_sum <= n.U))
+   (0 until rob.numWakeupPorts).map(n => uopsExecuted_sum_leN(n) := (uopsExecuted_sum <= n.U) && ~issueSlotsEmpty)
    val uopsExecuted_le_events: Seq[(String, () => Bool)] = uopsExecuted_sum_leN.zipWithIndex.map{case(v,i) => ("less than or equal to $i uops executed", () => v)}
    val uopsExecuted_stall = uopsExecuted_sum_leN(0)
    val uopsExecuted_stall_on_loads   = uopsExecuted_stall && io.lsu.perf.ldq_nonempty && rob.io.perf.com_load_is_at_rob_head
