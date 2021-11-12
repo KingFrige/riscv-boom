@@ -474,8 +474,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ("taken conditional branch instructions retired",     () => br_insn_retired_cond_taken(w)),
      ("not taken conditional branch instructions retired", () => br_insn_retired_cond_ntaken(w)),
      ("Counts the number of dispatched",   () => uopsDispatched_valids(w)),
-     ("Counts the number of retirement",   () => uopsRetired_valids(w))),
-     ("dispatch bubbles",                  () => ~uopsDispatched_valids(w) && backend_nostall)
+     ("Counts the number of retirement",   () => uopsRetired_valids(w)),
+     ("dispatch bubbles",                  () => ~uopsDispatched_valids(w) && backend_nostall))
    ))
        
    val topDownIssVec = (0 until issueParams.map(_.issueWidth).sum).map(w => new EventSet((mask, hits) => (mask & hits).orR, Seq(
