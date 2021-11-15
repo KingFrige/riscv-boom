@@ -425,7 +425,11 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val uopsExecuted_stall_on_stores  = uopsExecuted_stall && io.lsu.perf.stq_full && (~uopsExecuted_stall_on_loads)
  
    val uopsRetired_valids = rob.io.commit.valids
-   val uopsRetired_stall  = !uopsRetired_valids.reduce(_||_)
+   val uopsRetired_sum_leN = Wire(Vec(rob.retireWidth, Bool()))
+   val uopsRetired_sum = PopCount(uopsRetired_valids)
+   (0 until rob.retireWidth).map(n => uopsRetired_sum_leN(n) := (uopsRetired_sum <= n.U) && ~rob.io.perf.empty)
+   val uopsRetired_le_events: Seq[(String, () => Bool)] = uopsRetired_sum_leN.zipWithIndex.map{case(v,i) => ("less than or equal to $i uops Retired", () => v)}
+   val uopsRetired_stall  = uopsRetired_sum_leN(0)
  
    val bad_resteers_stat = RegInit(false.B)
    when((io.ifu.redirect_flush || io.ifu.sfence.valid) && fb_uopsNoDelivered){
@@ -527,6 +531,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ++ uopsExecuted_ge_events             // rob.numWakeupPorts
      ++ uopsExecuted_le_events.slice(0,2)  // 2 bit -> [0, 1]
      ++ arith_divider_active_events
+     ++ uopsRetired_le_events              // rob.retireWidth
    )
  
    val perfEvents = new SuperscalarEventSets(Seq(
