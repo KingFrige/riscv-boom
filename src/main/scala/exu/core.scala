@@ -381,7 +381,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    // split at ifu-fetuchBuffer < - > decode
    val backend_stall   = dec_hazards.reduce(_||_)
    val backend_nostall = !backend_stall
-   val fb_uopsNoDelivered= (~dec_fire.reduce(_||_)) && backend_nostall
  
    val uopsDelivered_sum_leN = Wire(Vec(coreWidth, Bool()))
    val uopsDelivered_sum = PopCount(dec_fire)
@@ -432,7 +431,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val uopsRetired_stall  = uopsRetired_sum_leN(0)
  
    val bad_resteers_stat = RegInit(false.B)
-   when((io.ifu.redirect_flush || io.ifu.sfence.valid) && fb_uopsNoDelivered){
+   when(io.ifu.redirect_flush || io.ifu.sfence.valid){
      bad_resteers_stat := true.B
    } .elsewhen(dec_fire.reduce(_||_)){
      bad_resteers_stat:= false.B
@@ -503,11 +502,13 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val resource_storebuffer_stalls = false.B
  
    val topDownCyclesEvents0 = new EventSet((mask, hits) => (mask & hits).orR, Seq(
-     ("bad speculation resteers cycle",     () => bad_resteers_stat),
+     ("bad speculation resteers cycle",     () => io.ifu.perf.badResteers),
      ("recovery cycle",                     () => resource_allocator_recovery_stat),
-     ("fb uops no Delivered cycle",         () => fb_uopsNoDelivered),
+     ("frontend unkowns branched resteers", () => io.ifu.perf.unknownsBranchCycles),
      ("branch mispred retired",             () => brupdate.b2.mispredict),
      ("machine clears",                     () => rob.io.flush.valid),
+     ("icache stalls cycles",               () => io.ifu.perf.iCache_stalls),
+     ("iTLB stalls cycles",                 () => io.ifu.perf.iTLB_stalls),
      ("any load mem stall",                 () => uopsExecuted_stall_on_loads),
      ("stores mem stall",                   () => uopsExecuted_stall_on_stores),
      ("l1d miss mem stall",                 () => mem_stall_l1d_miss),

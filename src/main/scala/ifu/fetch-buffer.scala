@@ -51,6 +51,7 @@ class FetchBuffer(implicit p: Parameters) extends BoomModule
 
     val perf = Output(new Bundle {
       val maybe_full  = Bool()
+      val amost_empty = Bool()
     })
   })
 
@@ -202,4 +203,5 @@ class FetchBuffer(implicit p: Parameters) extends BoomModule
 
   // perf event
   io.perf.maybe_full := maybe_full
+  io.perf.amost_empty := will_hit_tail
 }
