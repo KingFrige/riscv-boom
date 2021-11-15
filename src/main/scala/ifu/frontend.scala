@@ -1027,7 +1027,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     icache_stall_scope := false.B
   }
 
-  when(icache_stall_scope & io.cpu.perf.fb_empty){
+  when(RegNext(RegNext(icache_stall_scope)) & io.cpu.perf.fb_empty){
     icache_stall_find := true.B
   } .elsewhen(~io.cpu.perf.fb_empty){
     icache_stall_find := false.B
@@ -1037,7 +1037,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   io.cpu.perf.iTLB_stalls    := false.B
 
   val unknownsBranch_scope = RegInit(false.B)
-  when(f4_clear || icache_stall_find){
+  when(f4_clear || badResteers_flag){
     unknownsBranch_scope := false.B
   } .elsewhen(ShiftRegister(f2_clear, 3) && io.cpu.perf.fb_empty){
     unknownsBranch_scope := true.B
@@ -1047,7 +1047,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     unknownsBranch_scope := false.B
   }
 
-  io.cpu.perf.unknownsBranchCycles := unknownsBranch_scope & io.cpu.perf.fb_empty
+  io.cpu.perf.unknownsBranchCycles := unknownsBranch_scope
 
   override def toString: String =
     (BoomCoreStringPrefix("====Overall Frontend Params====") + "\n"
