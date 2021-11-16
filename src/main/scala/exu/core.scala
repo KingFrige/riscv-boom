@@ -473,14 +473,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val arith_divider_active_events: Seq[(String, () => Bool)] = arith_divider_active.zipWithIndex.map{case(v,i) => ("cycles when $i divider unit is busy", () => v)}
  
  
-   val cycles_l1d_miss = false.B
-   val cycles_l2_miss  = false.B
-   val cycles_l3_miss  = false.B
-   val mem_stall_l1d_miss = false.B
-   val mem_stall_l2_miss  = false.B
-   val mem_stall_l3_miss  = false.B
- 
- 
    val topDownslotsVec = (0 until coreWidth).map(w => new EventSet((mask, hits) => (mask & hits).orR, Seq(
      ("slots issued",                      () => dec_fire(w)),
      ("fetch bubbles",                     () => (~dec_fire(w)) && backend_nostall),
@@ -500,6 +492,13 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    val topDownWBVec = (0 until rob.numWakeupPorts).map(w => new EventSet((mask, hits) => (mask & hits).orR, Seq(
      ("executed sum",               () => uopsExecuted_valids(w))
      )))
+
+   val cycles_l1d_miss = false.B
+   val cycles_l2_miss  = false.B
+   val cycles_l3_miss  = false.B
+   val mem_stall_l1d_miss = false.B
+   val mem_stall_l2_miss  = false.B
+   val mem_stall_l3_miss  = false.B
  
    val resource_any_stalls = backend_stall
    val resource_rob_stalls = !rob.io.perf.ready
@@ -526,7 +525,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ("l3 miss mem stall",                  () => mem_stall_l3_miss),
      ("mem latency",                        () => false.B),
      ("resource stall",                     () => resource_any_stalls),
-     ("issueslots stall",                   () => resource_any_stalls),
+     ("issueslots stall",                   () => resource_issueslots_stalls),
      ("rob unit cause excution stall",      () => resource_rob_stalls),
      ("control-flow target misprediction",  () => br_misp_target),
      ("mispredicted conditional branch instructions retired", () => br_misp_dir),
