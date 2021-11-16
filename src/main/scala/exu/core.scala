@@ -328,7 +328,12 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
    val resourceEvents = new EventSet((mask, hits) => (mask & hits).orR, Seq(
       ("frontend fb full",                  () => io.ifu.perf.fb_full),
+      ("frontend fb empty",                 () => io.ifu.perf.fb_empty),
       ("frontend ftq full",                 () => io.ifu.perf.ftq_full),
+      ("branch mask full",                  () => dec_brmask_logic.io.is_full.reduce(_||_)),
+      ("int physical register full",        () => rename_stage.io.ren_stalls.reduce(_||_)),
+      ("pred physical register full",       () => pred_rename_stage.io.ren_stalls.reduce(_||_)),
+      ("fp  physical register full",        () => fp_rename_stage.io.ren_stalls.reduce(_||_)),
       ("issue slots empty",                 () => allIssueSlotsEmpty),
       ("int issue slots full",              () => int_iss_unit.io.perf.full),
       ("int issue slots empty",             () => int_iss_unit.io.perf.empty),
@@ -344,11 +349,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
  
  
    val memorySystemEvents = new EventSet((mask, hits) => (mask & hits).orR, Seq(
-      ("MSHR reuse",           () => io.lsu.perf.mshrs_reuse),
-      ("MSHR load establish",  () => io.lsu.perf.mshrs_load_establish),
-      ("MSHR load reuse",      () => io.lsu.perf.mshrs_load_reuse),
-      ("MSHR store establish", () => io.lsu.perf.mshrs_store_establish),
-      ("MSHR store reuse",     () => io.lsu.perf.mshrs_store_reuse),
       ("I$ loads",             () => false.B),
       ("I$ load miss",         () => io.ifu.perf.acquire),
       ("I$ prefetches",        () => false.B),
@@ -358,24 +358,35 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       ("D$ stores",            () => false.B),
       ("D$ store miss",        () => false.B),
       ("D$ prefetches",        () => false.B),
-      ("D$ prefetches miss",   () => false.B),
+      ("D$ prefetch misses",   () => false.B),
       ("D$ release",           () => io.lsu.perf.release),
+      ("ITLB loads",           () => false.B),
+      ("ITLB load miss",       () => io.ifu.perf.tlbMiss),
+      ("ITLB prefetches",      () => false.B),
+      ("ITLB prefetch misses", () => false.B),
+      ("DTLB loads",           () => false.B),
+      ("DTLB load miss",       () => io.lsu.perf.tlbMiss),
+      ("DTLB stores",          () => false.B),
+      ("DTLB store miss",      () => false.B),
+      ("DTLB prefetches",      () => false.B),
+      ("DTLB prefetch misses", () => false.B),
+      ("L2 hits",              () => false.B),
+      ("L2 misses",            () => false.B),
       ("L2 loads",             () => false.B),
       ("L2 load miss",         () => false.B),
       ("L2 stores",            () => false.B),
       ("L2 store miss",        () => false.B),
       ("L2 prefetches",        () => false.B),
       ("L2 prefetches miss",   () => false.B),
-      ("ITLB loads",           () => false.B),
-      ("ITLB load miss",       () => io.ifu.perf.tlbMiss),
-      ("DTLB loads",           () => false.B),
-      ("DTLB load miss",       () => io.lsu.perf.tlbMiss),
-      ("DTLB stores",          () => false.B),
-      ("DTLB store miss",      () => false.B),
       ("L2 TLB load",          () => false.B),
       ("L2 TLB miss",          () => io.ptw.perf.l2miss),
       ("L2 TLB stores",        () => false.B),
-      ("L2 TLB store miss",    () => false.B)
+      ("L2 TLB store miss",    () => false.B),
+      ("MSHR reuse",           () => io.lsu.perf.mshrs_reuse),
+      ("MSHR load establish",  () => io.lsu.perf.mshrs_load_establish),
+      ("MSHR load reuse",      () => io.lsu.perf.mshrs_load_reuse),
+      ("MSHR store establish", () => io.lsu.perf.mshrs_store_establish),
+      ("MSHR store reuse",     () => io.lsu.perf.mshrs_store_reuse)
       ))
  
    // split at ifu-fetuchBuffer < - > decode
