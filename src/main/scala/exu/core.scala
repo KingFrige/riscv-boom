@@ -495,6 +495,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
    val mem_stall_l1d_miss = false.B
    val mem_stall_l2_miss  = false.B
+   val mem_stall_dram     = false.B
  
    val resource_any_stalls = backend_stall
    val resource_rob_stalls = !rob.io.perf.ready
