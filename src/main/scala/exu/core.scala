@@ -526,14 +526,12 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ("l2 miss mem stall",                  () => mem_stall_l2_miss),
      ("l3 miss mem stall",                  () => mem_stall_l3_miss),
      ("mem latency",                        () => false.B),
+     ("rob unit cause excution stall",      () => !rob.io.perf.ready),
      ("control-flow target misprediction",  () => br_misp_target),
      ("mispredicted conditional branch instructions retired", () => br_misp_dir),
      ("taken conditional mispredicted branch instructions retired", () => br_misp_retired_cond_taken),
      ("not taken conditional mispredicted branch instructions retired", () => br_misp_retired_cond_ntaken),
-     ("rob unit cause excution stall",      () => !rob.io.perf.ready),
-     ("not actually retired uops",          () => uopsRetired_stall),
-     ("any load mem stall on issue",        () => uopsIssued_stall_on_loads),
-     ("stores mem stall on issue",          () => uopsIssued_stall_on_stores)
+     ("not actually retired uops",          () => uopsRetired_stall)
    ))
  
    val topDownCyclesEvents1 = new EventSet((mask, hits) => (mask & hits).orR,
