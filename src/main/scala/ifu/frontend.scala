@@ -1043,7 +1043,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     unknownsBranch_scope := true.B
   } .elsewhen(ShiftRegister(f1_clear, 4) && io.cpu.perf.fb_empty){
     unknownsBranch_scope := true.B
-  } .elsewhen(RegNext(f1_do_redirect) && f2_do_redirect && io.cpu.perf.fb_empty){
+  } .elsewhen(ShiftRegister(f1_do_redirect, 3) && ShiftRegister(f2_do_redirect, 2) && io.cpu.perf.fb_empty){
     unknownsBranch_scope := true.B
   } .elsewhen(~io.cpu.perf.fb_empty){
     unknownsBranch_scope := false.B
