@@ -489,8 +489,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ("not taken conditional branch instructions retired", () => br_insn_retired_cond_ntaken(w)),
      ("Counts the number of dispatched",   () => uopsDispatched_valids(w)),
      ("Counts the number of retirement",   () => uopsRetired_valids(w)),
-     ("dispatch bubbles",                  () => ~uopsDispatched_valids(w) && backend_nostall))
-   ))
+     ("retirement bubbles",                () => ~uopsRetired_valids(w))
+   )))
        
    val topDownIssVec = (0 until issueParams.map(_.issueWidth).sum).map(w => new EventSet((mask, hits) => (mask & hits).orR, Seq(
      ("issued uops sum",            () => uopsIssued_valids(w)),
@@ -501,17 +501,16 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ("executed sum",               () => uopsExecuted_valids(w))
      )))
  
+   val resource_any_stalls = backend_stall
+   val resource_rob_stalls = !rob.io.perf.ready
+   val resource_issueslots_stalls = !dispatcher.io.ren_uops.map(u => u.ready).reduce(_||_)
+
    val br_misp_retired = brupdate.b2.mispredict
    val br_misp_target = br_misp_retired && oldest_mispredict.cfi_type === CFI_JALR
    val br_misp_dir    = br_misp_retired && oldest_mispredict.cfi_type === CFI_BR
    val br_misp_retired_cond_taken  = br_misp_dir && brupdate.b2.taken
    val br_misp_retired_cond_ntaken = br_misp_dir && (~brupdate.b2.taken)
 
-   val resource_any_stalls = false.B
-   val resource_rob_stalls = false.B
-   val resource_issueslots_stalls = false.B
-   val resource_storebuffer_stalls = false.B
- 
    val topDownCyclesEvents0 = new EventSet((mask, hits) => (mask & hits).orR, Seq(
      ("bad speculation resteers cycle",     () => io.ifu.perf.badResteers),
      ("recovery cycle",                     () => resource_allocator_recovery_stat),
@@ -526,7 +525,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ("l2 miss mem stall",                  () => mem_stall_l2_miss),
      ("l3 miss mem stall",                  () => mem_stall_l3_miss),
      ("mem latency",                        () => false.B),
-     ("rob unit cause excution stall",      () => !rob.io.perf.ready),
+     ("resource stall",                     () => resource_any_stalls),
+     ("issueslots stall",                   () => resource_any_stalls),
+     ("rob unit cause excution stall",      () => resource_rob_stalls),
      ("control-flow target misprediction",  () => br_misp_target),
      ("mispredicted conditional branch instructions retired", () => br_misp_dir),
      ("taken conditional mispredicted branch instructions retired", () => br_misp_retired_cond_taken),
