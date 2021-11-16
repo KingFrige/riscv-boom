@@ -493,12 +493,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ("executed sum",               () => uopsExecuted_valids(w))
      )))
 
-   val cycles_l1d_miss = false.B
-   val cycles_l2_miss  = false.B
-   val cycles_l3_miss  = false.B
    val mem_stall_l1d_miss = false.B
    val mem_stall_l2_miss  = false.B
-   val mem_stall_l3_miss  = false.B
  
    val resource_any_stalls = backend_stall
    val resource_rob_stalls = !rob.io.perf.ready
@@ -522,7 +518,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
      ("stores mem stall",                   () => uopsExecuted_stall_on_stores),
      ("l1d miss mem stall",                 () => mem_stall_l1d_miss),
      ("l2 miss mem stall",                  () => mem_stall_l2_miss),
-     ("l3 miss mem stall",                  () => mem_stall_l3_miss),
+     ("dram mem stall",                     () => mem_stall_dram),
      ("mem latency",                        () => false.B),
      ("resource stall",                     () => resource_any_stalls),
      ("issueslots stall",                   () => resource_issueslots_stalls),
